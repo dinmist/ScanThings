@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Home Inventory</title>
+<!-- Self-contained: data stays in this browser (IndexedDB). Object detection runs on-device with TensorFlow.js (COCO-SSD),
+     downloaded once from the CDN and cached by the browser. No accounts, no server, no Claude. -->
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
+<style>
+  :root{--bg:#f6f5f1;--card:#fff;--ink:#1d1d1b;--mute:#6f6e68;--line:#e4e2dc;--acc:#2f6f5e;--acc2:#e9f2ee;--warn:#b4432f;--r:14px}
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  body{padding-bottom:90px}
+  header{position:sticky;top:0;z-index:5;background:var(--bg);padding:14px 16px 10px;border-bottom:1px solid var(--line)}
+  h1{margin:0 0 10px;font-size:20px;display:flex;align-items:center;justify-content:space-between}
+  h1 small{font-size:12px;font-weight:500;color:var(--mute)}
+  .search input{width:100%;padding:11px 14px;border:1px solid var(--line);border-radius:999px;font-size:16px;background:var(--card);outline:none}
+  .search input:focus{border-color:var(--acc)}
+  .chips{display:flex;gap:6px;overflow-x:auto;padding:10px 0 2px;scrollbar-width:none}.chips::-webkit-scrollbar{display:none}
+  .chip{white-space:nowrap;padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:var(--card);font-size:13px;color:var(--mute);cursor:pointer}
+  .chip.on{background:var(--acc);border-color:var(--acc);color:#fff}
+  main{padding:12px 16px}
+  .tabs{display:flex;background:#eceae4;border-radius:999px;padding:3px;margin-bottom:10px}
+  .tabs button{flex:1;border:0;background:transparent;padding:8px;border-radius:999px;font-size:14px;font-weight:600;color:var(--mute);cursor:pointer}
+  .tabs button.on{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+  .empty{text-align:center;color:var(--mute);padding:60px 20px;font-size:15px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;display:flex;flex-direction:column}
+  .card .ph{aspect-ratio:1;background:#eceae4 center/cover no-repeat;display:flex;align-items:center;justify-content:center;color:#b8b5ab;font-size:34px;cursor:zoom-in}
+  .card .b{padding:9px 11px 11px;cursor:pointer}
+  .card .n{font-weight:600;font-size:15px;line-height:1.25}
+  .card .w{font-size:12px;color:var(--mute);margin-top:3px;cursor:pointer}
+  .locs{display:flex;flex-direction:column;gap:8px}
+  .locgroup{font-size:12px;font-weight:700;color:var(--mute);text-transform:uppercase;letter-spacing:.05em;margin:14px 2px 2px}
+  .loc{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;display:flex;align-items:center;gap:12px;cursor:pointer}
+  .loc .t{flex:1}.loc .t b{display:block;font-size:15px}.loc .t span{font-size:12px;color:var(--mute)}
+  .loc .c{background:var(--acc2);color:var(--acc);font-weight:700;font-size:13px;padding:4px 10px;border-radius:999px}
+  .locitems{display:flex;flex-direction:column;gap:6px;margin:-2px 0 6px 10px;border-left:2px solid var(--line);padding-left:10px}
+  .li{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 10px;cursor:pointer}
+  .li .th{width:96px;height:96px;border-radius:10px;background:#eceae4 center/cover no-repeat;flex:none;display:flex;align-items:center;justify-content:center;color:#b8b5ab;cursor:zoom-in}
+  .li .n{font-weight:600;font-size:14px}.li .s{font-size:12px;color:var(--mute)}
+  .back{display:flex;align-items:center;gap:8px;background:var(--acc2);color:var(--acc);border-radius:10px;padding:10px 12px;margin-bottom:12px;font-weight:600;cursor:pointer}
+  .fab{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;z-index:6;display:flex;gap:10px}
+  .fab button{border:0;background:var(--acc);color:#fff;font-size:15px;font-weight:600;padding:14px 20px;border-radius:999px;box-shadow:0 8px 24px rgba(0,0,0,.18);cursor:pointer}
+  .fab button.sec{background:#fff;color:var(--ink);border:1px solid var(--line)}
+  .sheet{position:fixed;inset:0;z-index:20;background:rgba(0,0,0,.35);display:none;align-items:flex-end;justify-content:center}
+  .sheet.open{display:flex}
+  .panel{background:var(--card);width:100%;max-width:560px;max-height:92vh;overflow:auto;border-radius:20px 20px 0 0;padding:16px 18px 18px}
+  @media(min-width:600px){.sheet{align-items:center}.panel{border-radius:20px}}
+  .panel h2{margin:0 0 12px;font-size:18px;display:flex;justify-content:space-between;align-items:center}
+  .x{border:0;background:#eee;width:32px;height:32px;border-radius:50%;font-size:16px;cursor:pointer}
+  .preview{width:100%;max-height:260px;object-fit:contain;background:#eceae4;border-radius:12px;display:block}
+  .camwrap{position:relative;background:#000;border-radius:12px;overflow:hidden}
+  .camwrap video{width:100%;max-height:60vh;display:block}
+  .camwrap .shutter{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);width:66px;height:66px;border-radius:50%;background:#fff;border:5px solid rgba(255,255,255,.5);cursor:pointer}
+  label{display:block;font-size:12px;color:var(--mute);margin:12px 0 4px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+  input[type=text],textarea{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;font-size:16px;background:#fff;font-family:inherit}
+  textarea{min-height:60px;resize:vertical}
+  .row{display:flex;gap:10px}.row>*{flex:1}
+  .btn{border:0;border-radius:10px;padding:12px 16px;font-size:15px;font-weight:600;cursor:pointer;background:var(--acc);color:#fff}
+  .btn.ghost{background:var(--acc2);color:var(--acc)}.btn.danger{background:#fbeae6;color:var(--warn)}.btn:disabled{opacity:.5}
+  .actions{display:flex;gap:10px;margin-top:18px;flex-wrap:wrap}
+  .found{margin-top:8px;display:flex;flex-direction:column;gap:8px}
+  .fi{display:flex;gap:8px;align-items:center;background:var(--acc2);border-radius:10px;padding:8px 10px}
+  .fi input[type=checkbox]{width:20px;height:20px;accent-color:var(--acc)}
+  .fi .crop{width:48px;height:48px;border-radius:8px;object-fit:cover;background:#eceae4;flex:none}
+  .fi input[type=text]{flex:1;padding:8px 10px;background:#fff}
+  .status{font-size:13px;color:var(--mute);margin-top:8px;min-height:18px}.status.err{color:var(--warn)}
+  .spin{display:inline-block;width:14px;height:14px;border:2px solid #ccc;border-top-color:var(--acc);border-radius:50%;animation:s .8s linear infinite;vertical-align:-2px;margin-right:6px}
+  @keyframes s{to{transform:rotate(360deg)}}
+  .lb{position:fixed;inset:0;z-index:30;background:rgba(0,0,0,.9);display:none;align-items:center;justify-content:center;flex-direction:column;gap:10px;padding:16px}
+  .lb.open{display:flex}.lb img{max-width:100%;max-height:80vh;border-radius:10px}.lb .cap{color:#fff;font-weight:600}
+  .cropper{position:relative;display:inline-block;max-width:100%;touch-action:none;user-select:none}
+  .cropper img{max-width:100%;max-height:60vh;display:block;border-radius:10px}
+  .cropper .sel{position:absolute;border:2px dashed #fff;box-shadow:0 0 0 9999px rgba(0,0,0,.45);pointer-events:none;border-radius:4px}
+  .hint{font-size:13px;color:var(--mute);margin-top:6px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Home Inventory <small id="count"></small><small style="opacity:.5">v8</small></h1>
+  <div class="search"><input id="q" type="search" placeholder="Search: screwdriver, spanner, kitchen drawer…" autocomplete="off"></div>
+  <div class="chips" id="chips"></div>
+</header>
+<main>
+  <div class="tabs"><button id="tabItems" class="on">Items</button><button id="tabLocs">Locations</button></div>
+  <div id="back" class="back" style="display:none"></div>
+  <div id="locs" class="locs" style="display:none"></div>
+  <div id="list" class="grid"></div>
+  <div id="empty" class="empty">No items yet. Tap <b>Add item</b> to photograph something.</div>
+</main>
+
+<div class="fab">
+  <button id="addBtn">📷 Add item</button>
+  <button id="moreBtn" class="sec">⋯</button>
+</div>
+<input id="pick" type="file" accept="image/*" capture="environment" hidden>
+<input id="importFile" type="file" accept="application/json" hidden>
+
+<!-- Camera sheet -->
+<div class="sheet" id="camSheet"><div class="panel">
+  <h2>Take photo <button class="x" data-close="camSheet">✕</button></h2>
+  <div class="camwrap"><video id="video" autoplay playsinline muted></video><div class="shutter" id="shutter"></div></div>
+  <div class="actions"><button class="btn ghost" id="useFile">Choose from gallery instead</button></div>
+</div></div>
+
+<!-- Add sheet -->
+<div class="sheet" id="addSheet"><div class="panel">
+  <h2>New item(s) <button class="x" data-close="addSheet">✕</button></h2>
+  <img id="prev" class="preview" alt="">
+  <div class="status" id="scanStatus"></div>
+  <label>Items found (tick to save, edit names)</label>
+  <div class="found" id="found"></div>
+  <div class="actions" style="margin-top:8px">
+    <button class="btn ghost" id="addRow" type="button">+ Add item (whole photo)</button>
+    <button class="btn ghost" id="addCrop" type="button">+ Add item by drawing a box</button>
+  </div>
+  <div class="row">
+    <div><label>Place</label><input type="text" id="aPlace" list="places" placeholder="Home, Garage, Office…"></div>
+    <div><label>Room / area</label><input type="text" id="aRoom" list="rooms" placeholder="Kitchen, Shed, Loft…"></div>
+  </div>
+  <label>Exact spot (space)</label>
+  <input type="text" id="aSpace" list="spaces" placeholder="e.g. 2nd drawer left of sink, top shelf, red toolbox">
+  <label>Notes</label><textarea id="aNotes" placeholder="Optional: quantity, brand, size…"></textarea>
+  <div class="actions"><button class="btn" id="saveAdd">Save</button><button class="btn ghost" data-close="addSheet">Cancel</button></div>
+</div></div>
+
+<!-- Crop sheet -->
+<div class="sheet" id="cropSheet"><div class="panel">
+  <h2>Draw a box around the item <button class="x" data-close="cropSheet">✕</button></h2>
+  <div class="cropper" id="cropper"><img id="cropImg" alt=""><div class="sel" id="sel" style="display:none"></div></div>
+  <div class="hint">Drag on the photo to select the item.</div>
+  <div class="actions"><button class="btn" id="cropOk" disabled>Use this box</button><button class="btn ghost" data-close="cropSheet">Cancel</button></div>
+</div></div>
+
+<!-- Edit sheet -->
+<div class="sheet" id="editSheet"><div class="panel">
+  <h2>Edit item <button class="x" data-close="editSheet">✕</button></h2>
+  <img id="ePrev" class="preview" alt="" style="cursor:zoom-in">
+  <label>Name</label><input type="text" id="eName">
+  <div class="row">
+    <div><label>Place</label><input type="text" id="ePlace" list="places"></div>
+    <div><label>Room / area</label><input type="text" id="eRoom" list="rooms"></div>
+  </div>
+  <label>Exact spot (space)</label><input type="text" id="eSpace" list="spaces">
+  <label>Tags (comma separated)</label><input type="text" id="eTags">
+  <label>Notes</label><textarea id="eNotes"></textarea>
+  <div class="actions"><button class="btn" id="saveEdit">Save changes</button><button class="btn danger" id="delItem">Delete</button></div>
+</div></div>
+
+<!-- More sheet -->
+<div class="sheet" id="moreSheet"><div class="panel">
+  <h2>Backup & settings <button class="x" data-close="moreSheet">✕</button></h2>
+  <p class="hint">Everything is stored only in this browser on this device. Export regularly to keep a backup or move to another device.</p>
+  <div class="actions">
+    <button class="btn" id="exportBtn">Export backup (.json)</button>
+    <button class="btn ghost" id="importBtn">Import backup</button>
+  </div>
+  <div class="status" id="moreStatus"></div>
+</div></div>
+
+<div class="lb" id="lb"><img id="lbImg" alt=""><div class="cap" id="lbCap"></div></div>
+<datalist id="places"></datalist><datalist id="rooms"></datalist><datalist id="spaces"></datalist>
+
+<script>
+(() => {
+const $ = s => document.querySelector(s);
+const uid = () => Math.random().toString(36).slice(2,10)+Date.now().toString(36);
+const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let items=[], filterRoom=null, locFilter=null, view='items', editing=null;
+let pendingImg=null, pendingPhotoUrl=null, stream=null, model=null, modelLoading=null, yolo=null, yoloNames=null, yoloLoading=null;
+
+// ---------- IndexedDB ----------
+const DBN='home-inventory', STORE='items';
+function openDB(){ return new Promise((res,rej)=>{ const r=indexedDB.open(DBN,1); r.onupgradeneeded=()=>r.result.createObjectStore(STORE,{keyPath:'id'}); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
+async function tx(mode,fn){ const d=await openDB(); return new Promise((res,rej)=>{ const t=d.transaction(STORE,mode); const s=t.objectStore(STORE); const out=fn(s); t.oncomplete=()=>res(out&&out.result!==undefined?out.result:out); t.onerror=()=>rej(t.error); }); }
+let useLS=false; const LSK='home-inventory-items';
+async function loadAll(){ if(useLS){ try{ items=JSON.parse(localStorage.getItem(LSK)||'[]'); }catch(e){ items=[]; } items.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)); render(); return; }
+  let d; try{ d=await openDB(); }catch(e){ useLS=true; return loadAll(); } items=await new Promise((res,rej)=>{ const r=d.transaction(STORE).objectStore(STORE).getAll(); r.onsuccess=()=>res(r.result||[]); r.onerror=()=>rej(r.error); }); items.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)); render(); }
+async function putItem(it){ if(useLS){ const i=items.findIndex(x=>x.id===it.id); if(i>=0) items[i]=it; else items.push(it); localStorage.setItem(LSK,JSON.stringify(items)); return loadAll(); } try{ await tx('readwrite',s=>s.put(it)); }catch(e){ useLS=true; return putItem(it); } await loadAll(); }
+async function removeItem(id){ if(useLS){ items=items.filter(x=>x.id!==id); localStorage.setItem(LSK,JSON.stringify(items)); return loadAll(); } await tx('readwrite',s=>s.delete(id)); await loadAll(); }
+
+// ---------- helpers ----------
+function whereText(it){ return [it.place,it.room,it.space].filter(Boolean).join(' › '); }
+function locKey(it){ return [it.place||'',it.room||'',it.space||''].join('|'); }
+function loadImg(src){ return new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=rej; i.src=src; }); }
+function readDataURL(file){ return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=()=>rej(r.error||new Error('read failed')); r.readAsDataURL(file); }); }
+async function shrinkFile(file,max=1280){ const img=await loadImg(await readDataURL(file)); return shrinkImg(img,max); }
+function toast(msg){ let t=document.getElementById('toast'); if(!t){ t=document.createElement('div'); t.id='toast'; t.style.cssText='position:fixed;left:50%;transform:translateX(-50%);bottom:90px;z-index:50;background:#b4432f;color:#fff;padding:10px 14px;border-radius:10px;font-size:14px;max-width:90%'; document.body.appendChild(t);} t.textContent=msg; t.style.display='block'; clearTimeout(t._h); t._h=setTimeout(()=>t.style.display='none',6000); }
+function shrinkImg(img,max=1280){ const r=Math.min(1,max/Math.max(img.width,img.height)); const c=document.createElement('canvas'); c.width=Math.round(img.width*r); c.height=Math.round(img.height*r); c.getContext('2d').drawImage(img,0,0,c.width,c.height); return c.toDataURL('image/jpeg',.8); }
+function cropBox(img,box,max){ // box = [x,y,w,h] in pixels of img, or null for whole image
+  let x=0,y=0,w=img.width,h=img.height;
+  if(box){ const pad=.06; x=Math.max(0,box[0]-box[2]*pad); y=Math.max(0,box[1]-box[3]*pad); w=Math.min(img.width-x,box[2]*(1+2*pad)); h=Math.min(img.height-y,box[3]*(1+2*pad)); }
+  const r=Math.min(1,max/Math.max(w,h)); const c=document.createElement('canvas'); c.width=Math.max(1,Math.round(w*r)); c.height=Math.max(1,Math.round(h*r));
+  c.getContext('2d').drawImage(img,x,y,w,h,0,0,c.width,c.height); return c.toDataURL('image/jpeg',.8); }
+
+// ---------- render ----------
+function setView(v){ view=v; $('#tabItems').classList.toggle('on',v==='items'); $('#tabLocs').classList.toggle('on',v==='locs'); render(); }
+function render(){
+  const isLocs=view==='locs';
+  $('#locs').style.display=isLocs?'flex':'none'; $('#list').style.display=isLocs?'none':'grid'; $('#chips').style.display=(isLocs||locFilter)?'none':'flex';
+  $('#back').style.display=locFilter?'flex':'none';
+  if(locFilter){ const p=locFilter.split('|'); $('#back').textContent='‹ Back to locations — '+(p.filter(Boolean).join(' › ')||'No location'); }
+  const fill=(id,key)=>$('#'+id).innerHTML=[...new Set(items.map(i=>i[key]).filter(Boolean))].map(v=>'<option value="'+esc(v)+'">').join('');
+  fill('places','place'); fill('rooms','room'); fill('spaces','space');
+  if(isLocs){ renderLocs(); $('#empty').style.display='none'; $('#count').textContent=items.length?items.length+' items':''; return; }
+  const q=$('#q').value.trim().toLowerCase(); const terms=q.split(/\s+/).filter(Boolean);
+  const rooms=[...new Set(items.map(i=>i.room).filter(Boolean))].sort();
+  $('#chips').innerHTML=['<span class="chip'+(filterRoom?'':' on')+'" data-r="">All</span>'].concat(rooms.map(r=>'<span class="chip'+(filterRoom===r?' on':'')+'" data-r="'+esc(r)+'">'+esc(r)+'</span>')).join('');
+  const shown=items.filter(it=>{
+    if(locFilter&&locKey(it)!==locFilter) return false;
+    if(filterRoom&&it.room!==filterRoom) return false;
+    if(!terms.length) return true;
+    const hay=[it.name,it.place,it.room,it.space,it.notes,(it.tags||[]).join(' ')].join(' ').toLowerCase();
+    return terms.every(t=>hay.includes(t));
+  });
+  $('#count').textContent=items.length?(shown.length===items.length?items.length+' items':shown.length+' of '+items.length):'';
+  $('#empty').style.display=shown.length?'none':'block';
+  $('#empty').innerHTML=items.length?'Nothing matches "'+esc(q)+'".':'No items yet. Tap <b>Add item</b> to photograph something.';
+  $('#list').innerHTML=shown.map(it=>`<div class="card" data-id="${it.id}">
+    <div class="ph" ${it.photo?`style="background-image:url('${it.photo}')"`:''}>${it.photo?'':'📦'}</div>
+    <div class="b"><div class="n">${esc(it.name)}</div><div class="w" data-loc="${esc(locKey(it))}">📍 ${esc(whereText(it))||'No location'}</div></div></div>`).join('');
+}
+function renderLocs(){
+  const groups={}; items.forEach(it=>{ const k=locKey(it); (groups[k]=groups[k]||{it,list:[]}).list.push(it); });
+  const keys=Object.keys(groups).sort((a,b)=>a.localeCompare(b));
+  if(!keys.length){ $('#locs').innerHTML='<div class="empty">No locations yet.</div>'; return; }
+  let html='',last='';
+  keys.forEach(k=>{ const g=groups[k]; const top=[g.it.place,g.it.room].filter(Boolean).join(' › ')||'No location';
+    if(top!==last){ html+='<div class="locgroup">'+esc(top)+'</div>'; last=top; }
+    html+=`<div class="loc" data-k="${esc(k)}"><div class="t"><b>${esc(g.it.space||'(no exact spot)')}</b><span>${esc(top)}</span></div><div class="c">${g.list.length}</div></div>`;
+    html+='<div class="locitems">'+g.list.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map(it=>`<div class="li" data-id="${it.id}"><div class="th" ${it.photo?`style="background-image:url('${it.photo}')"`:''}>${it.photo?'':'📦'}</div><div><div class="n">${esc(it.name)}</div>${it.notes?`<div class="s">${esc(it.notes)}</div>`:''}</div></div>`).join('')+'</div>'; });
+  $('#locs').innerHTML=html;
+}
+function showPhoto(it){ if(!it||!it.photo) return; $('#lbImg').src=it.photo; $('#lbCap').textContent=it.name+' — '+(whereText(it)||'No location'); $('#lb').classList.add('open'); }
+$('#lb').onclick=()=>$('#lb').classList.remove('open');
+$('#q').addEventListener('input',render);
+$('#chips').addEventListener('click',e=>{ const c=e.target.closest('.chip'); if(!c) return; filterRoom=c.dataset.r||null; render(); });
+$('#tabItems').onclick=()=>{ locFilter=null; setView('items'); };
+$('#tabLocs').onclick=()=>{ locFilter=null; setView('locs'); };
+$('#back').onclick=()=>{ locFilter=null; setView('locs'); };
+$('#list').addEventListener('click',e=>{ const ph=e.target.closest('.ph'); if(ph){ showPhoto(items.find(i=>i.id===ph.parentElement.dataset.id)); return; }
+  const w=e.target.closest('.w'); if(w){ locFilter=w.dataset.loc; filterRoom=null; $('#q').value=''; setView('items'); return; }
+  const c=e.target.closest('.card'); if(c) openEdit(c.dataset.id); });
+$('#locs').addEventListener('click',e=>{ const th=e.target.closest('.th'); if(th){ showPhoto(items.find(i=>i.id===th.parentElement.dataset.id)); return; }
+  const li=e.target.closest('.li'); if(li){ openEdit(li.dataset.id); return; }
+  const l=e.target.closest('.loc'); if(l){ locFilter=l.dataset.k; filterRoom=null; $('#q').value=''; setView('items'); } });
+document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>{ $('#'+b.dataset.close).classList.remove('open'); if(b.dataset.close==='camSheet') stopCam(); });
+
+// ---------- camera ----------
+async function startCam(){
+  try{ stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920}},audio:false}); $('#video').srcObject=stream; $('#camSheet').classList.add('open'); }
+  catch(e){ $('#pick').click(); } // no camera permission / not https → fall back to file picker (phones open camera from it)
+}
+function stopCam(){ if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; } }
+const isPhone=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)||(navigator.maxTouchPoints>1&&/Mac/.test(navigator.platform));
+$('#addBtn').onclick=()=>{ if(!isPhone&&location.protocol!=='file:'&&navigator.mediaDevices&&navigator.mediaDevices.getUserMedia) startCam(); else $('#pick').click(); };
+$('#useFile').onclick=()=>{ stopCam(); $('#camSheet').classList.remove('open'); $('#pick').click(); };
+$('#shutter').onclick=async()=>{ const v=$('#video'); const c=document.createElement('canvas'); c.width=v.videoWidth; c.height=v.videoHeight; c.getContext('2d').drawImage(v,0,0); stopCam(); $('#camSheet').classList.remove('open'); try{ await startAdd(await loadImg(c.toDataURL('image/jpeg',.9))); }catch(err){ toast('Could not use photo: '+(err&&err.message||err)); } };
+$('#pick').onchange=async e=>{ const f=e.target.files[0]; e.target.value=''; if(!f) return; try{ await startAdd(await loadImg(await shrinkFile(f))); }catch(err){ console.error(err); toast('Could not open photo: '+(err&&err.message||err)); } };
+
+// ---------- add flow ----------
+function foundRow(name='',box=null,checked=true){
+  const d=document.createElement('div'); d.className='fi'; d._box=box;
+  d.innerHTML=`<input type="checkbox" ${checked?'checked':''}><img class="crop" alt=""><input type="text" value="${esc(name)}" placeholder="Item name">`;
+  if(pendingImg) d.querySelector('.crop').src=cropBox(pendingImg,box,160);
+  return d;
+}
+async function startAdd(img){
+  pendingPhotoUrl=shrinkImg(img,1280); pendingImg=await loadImg(pendingPhotoUrl);
+  $('#found').innerHTML=''; $('#aNotes').value=''; $('#aSpace').value='';
+  $('#scanStatus').className='status'; $('#scanStatus').textContent='';
+  $('#prev').src=pendingPhotoUrl; $('#addSheet').classList.add('open');
+  if(!$('#aPlace').value) $('#aPlace').value=localStorage.getItem('hi-place')||'Home';
+  detect();
+}
+// ---- YOLOv8 (Open Images V7, 601 classes) via ONNX Runtime Web; files served from ./model/ ----
+async function loadYolo(){
+  if(yolo) return yolo;
+  if(!window.ort) throw new Error('onnxruntime not loaded');
+  ort.env.wasm.wasmPaths='https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/';
+  ort.env.wasm.numThreads=1;
+  const base=new URL('model/',document.baseURI).href;
+  yoloNames=await (await fetch(base+'yolov8n-oiv7.names.json')).json();
+  const providers=[]; if(navigator.gpu) providers.push('webgpu'); providers.push('wasm');
+  try{ yolo=await ort.InferenceSession.create(base+'yolov8n-oiv7.onnx',{executionProviders:providers}); }
+  catch(e){ yolo=await ort.InferenceSession.create(base+'yolov8n-oiv7.onnx',{executionProviders:['wasm']}); }
+  return yolo;
+}
+async function yoloDetect(src,th){ // src: canvas/image; returns [{class,score,bbox:[x,y,w,h]}] in src pixels
+  const S=640, W=src.width, H=src.height, r=Math.min(S/W,S/H), nw=Math.round(W*r), nh=Math.round(H*r), px=Math.floor((S-nw)/2), py=Math.floor((S-nh)/2);
+  const c=document.createElement('canvas'); c.width=S; c.height=S; const g=c.getContext('2d'); g.fillStyle='#727272'; g.fillRect(0,0,S,S); g.drawImage(src,px,py,nw,nh);
+  const d=g.getImageData(0,0,S,S).data, n=S*S, f=new Float32Array(3*n);
+  for(let i=0;i<n;i++){ f[i]=d[i*4]/255; f[n+i]=d[i*4+1]/255; f[2*n+i]=d[i*4+2]/255; }
+  const inName=yolo.inputNames[0], out=await yolo.run({[inName]:new ort.Tensor('float32',f,[1,3,S,S])});
+  const t=out[yolo.outputNames[0]], [,C,A]=t.dims, data=t.data, nc=C-4, res=[];
+  for(let a=0;a<A;a++){ let best=0,bi=-1; for(let k=0;k<nc;k++){ const s=data[(4+k)*A+a]; if(s>best){best=s;bi=k;} }
+    if(best<th) continue; const cx=data[a],cy=data[A+a],w=data[2*A+a],hh=data[3*A+a];
+    res.push({class:(yoloNames&&(yoloNames[bi]||yoloNames[String(bi)]))||('class '+bi),score:best,bbox:[(cx-w/2-px)/r,(cy-hh/2-py)/r,w/r,hh/r]}); }
+  return res;
+}
+// Run the detector on the whole photo plus zoomed-in overlapping tiles, then merge duplicates.
+async function detectTiled(img){
+  const TH=.25, W=img.width, H=img.height, out=[];
+  const run=async(sx,sy,sw,sh)=>{ const c=document.createElement('canvas'); const s=Math.max(1,640/Math.max(sw,sh)); c.width=Math.round(sw*s); c.height=Math.round(sh*s);
+    c.getContext('2d').drawImage(img,sx,sy,sw,sh,0,0,c.width,c.height);
+    let p=[]; if(yolo){ try{ p=p.concat(await yoloDetect(c,.12)); }catch(e){ console.warn(e); } } if(model){ try{ p=p.concat(await model.detect(c,40,TH)); }catch(e){ console.warn(e); } }
+    p.forEach(d=>out.push({class:d.class,score:d.score,bbox:[sx+d.bbox[0]/s,sy+d.bbox[1]/s,d.bbox[2]/s,d.bbox[3]/s]})); };
+  await run(0,0,W,H);
+  const tw=W*.6, th=H*.6; // 2x2 overlapping tiles
+  for(const fx of [0,.4]) for(const fy of [0,.4]) await run(Math.round(W*fx),Math.round(H*fy),Math.round(tw),Math.round(th));
+  // non-max suppression across all passes (class-agnostic, keeps highest score)
+  const iou=(a,b)=>{ const x1=Math.max(a[0],b[0]),y1=Math.max(a[1],b[1]),x2=Math.min(a[0]+a[2],b[0]+b[2]),y2=Math.min(a[1]+a[3],b[1]+b[3]); const i=Math.max(0,x2-x1)*Math.max(0,y2-y1); return i/(a[2]*a[3]+b[2]*b[3]-i); };
+  out.sort((a,b)=>b.score-a.score); const keep=[];
+  for(const d of out){ if(d.bbox[2]*d.bbox[3]>W*H*.9) continue; if(d.bbox[2]<W*.03||d.bbox[3]<H*.03) continue; if(!keep.some(k=>iou(k.bbox,d.bbox)>.45)) keep.push(d); }
+  return keep.slice(0,40);
+}
+async function detect(){
+  const st=$('#scanStatus');
+  try{
+    st.innerHTML='<span class="spin"></span>'+((yolo||model)?'Detecting objects…':'Loading detector (first time only)…');
+    if(!yolo){ try{ yoloLoading=yoloLoading||loadYolo(); await yoloLoading; }catch(e){ console.warn('YOLO unavailable',e); yoloLoading=null; } }
+    if(!yolo && !window.cocoSsd) throw new Error('no detector could be loaded');
+    if(!model && window.cocoSsd){ try{ await tf.ready(); }catch(e){}
+      // Prefer a copy of the model hosted next to this page (model/model.json); fall back to the public CDN copy.
+      const cands=[]; try{ cands.push(new URL('model/model.json',document.baseURI||location.href).href); }catch(e){}
+      cands.push('model/model.json','./model/model.json',null); // null = library default (public CDN)
+      modelLoading=modelLoading||(async()=>{ let last; for(const u of cands){ try{ return await cocoSsd.load(u?{base:'lite_mobilenet_v2',modelUrl:u}:{base:'lite_mobilenet_v2'}); }catch(e){ console.warn('model load failed for',u,e); last=e; } } throw last; })();
+      model=await modelLoading; st.innerHTML='<span class="spin"></span>Detecting objects…'; }
+    let preds;
+    try{ preds=await detectTiled(pendingImg); }
+    catch(e1){ // GPU/WebGL trouble on some phones: retry on the CPU backend (slower but reliable)
+      st.innerHTML='<span class="spin"></span>Retrying on CPU…'; await tf.setBackend('cpu'); await tf.ready(); preds=await detectTiled(pendingImg); }
+    const rows=preds.filter(p=>p.bbox[2]>20&&p.bbox[3]>20).map(p=>({name:String(p.class).replace(/\s*\(.*?\)\s*$/,''),box:p.bbox}));
+    $('#found').innerHTML='';
+    if(rows.length){ rows.forEach(r=>$('#found').appendChild(foundRow(r.name,r.box,true))); st.textContent=`Found ${rows.length} object${rows.length>1?'s':''} — rename them (e.g. "scissors" → "kitchen scissors"), untick extras, or add items manually.`; }
+    else { $('#found').appendChild(foundRow('')); st.textContent='No objects auto-detected — type the name, or draw a box around each item.'; }
+  }catch(e){ console.error(e); st.className='status err'; st.textContent='Detection failed: '+(e&&(e.message||e.name)||e)+' — you can still add items manually or by drawing a box.'; if(!$('#found').children.length)$('#found').appendChild(foundRow('')); }
+}
+$('#addRow').onclick=()=>{ const r=foundRow(''); $('#found').appendChild(r); r.querySelector('[type=text]').focus(); };
+
+// manual crop
+let dragStart=null, cropRect=null;
+$('#addCrop').onclick=()=>{ $('#cropImg').src=pendingPhotoUrl; $('#sel').style.display='none'; cropRect=null; $('#cropOk').disabled=true; $('#cropSheet').classList.add('open'); };
+const cr=$('#cropper');
+function pt(e){ const r=$('#cropImg').getBoundingClientRect(); return [Math.min(Math.max(e.clientX-r.left,0),r.width), Math.min(Math.max(e.clientY-r.top,0),r.height)]; }
+cr.addEventListener('pointerdown',e=>{ dragStart=pt(e); cr.setPointerCapture(e.pointerId); });
+cr.addEventListener('pointermove',e=>{ if(!dragStart) return; const p=pt(e); const x=Math.min(dragStart[0],p[0]),y=Math.min(dragStart[1],p[1]),w=Math.abs(p[0]-dragStart[0]),h=Math.abs(p[1]-dragStart[1]);
+  Object.assign($('#sel').style,{display:'block',left:x+'px',top:y+'px',width:w+'px',height:h+'px'}); cropRect=[x,y,w,h]; });
+cr.addEventListener('pointerup',()=>{ dragStart=null; $('#cropOk').disabled=!(cropRect&&cropRect[2]>10&&cropRect[3]>10); });
+$('#cropOk').onclick=()=>{ const r=$('#cropImg').getBoundingClientRect(); const s=pendingImg.width/r.width; const box=cropRect.map(v=>v*s);
+  const row=foundRow('',box); $('#found').appendChild(row); $('#cropSheet').classList.remove('open'); row.querySelector('[type=text]').focus(); };
+
+$('#saveAdd').onclick=async()=>{
+  const rows=[...$('#found').querySelectorAll('.fi')].filter(r=>r.querySelector('[type=checkbox]').checked&&r.querySelector('[type=text]').value.trim());
+  if(!rows.length){ $('#scanStatus').className='status err'; $('#scanStatus').textContent='Tick or type at least one item name.'; return; }
+  const btn=$('#saveAdd'); btn.disabled=true; btn.textContent='Saving…';
+  const base={place:$('#aPlace').value.trim(),room:$('#aRoom').value.trim(),space:$('#aSpace').value.trim(),notes:$('#aNotes').value.trim(),createdAt:Date.now()};
+  try{ localStorage.setItem('hi-place',base.place); }catch(e){}
+  try{
+    const full=shrinkImg(pendingImg,900);
+    for(const r of rows){ await putItem({id:uid(),name:r.querySelector('[type=text]').value.trim(),tags:[],...base,photo:cropBox(pendingImg,r._box,700),fullPhoto:full}); }
+    $('#addSheet').classList.remove('open');
+  }catch(e){ $('#scanStatus').className='status err'; $('#scanStatus').textContent='Save failed: '+(e.message||e); }
+  btn.disabled=false; btn.textContent='Save';
+};
+
+// ---------- edit ----------
+function openEdit(id){
+  editing=items.find(i=>i.id===id); if(!editing) return;
+  $('#ePrev').src=editing.photo||''; $('#ePrev').style.display=editing.photo?'block':'none'; $('#ePrev').onclick=()=>showPhoto(editing);
+  $('#eName').value=editing.name||''; $('#ePlace').value=editing.place||''; $('#eRoom').value=editing.room||'';
+  $('#eSpace').value=editing.space||''; $('#eTags').value=(editing.tags||[]).join(', '); $('#eNotes').value=editing.notes||'';
+  $('#editSheet').classList.add('open');
+}
+$('#saveEdit').onclick=async()=>{ if(!editing) return;
+  await putItem({...editing,name:$('#eName').value.trim()||editing.name,place:$('#ePlace').value.trim(),room:$('#eRoom').value.trim(),space:$('#eSpace').value.trim(),
+    tags:$('#eTags').value.split(',').map(s=>s.trim()).filter(Boolean),notes:$('#eNotes').value.trim(),updatedAt:Date.now()});
+  $('#editSheet').classList.remove('open'); };
+$('#delItem').onclick=async()=>{ if(!editing) return; const b=$('#delItem');
+  if(b.dataset.arm!=='1'){ b.dataset.arm='1'; b.textContent='Tap again to delete'; setTimeout(()=>{b.dataset.arm='';b.textContent='Delete';},2500); return; }
+  await removeItem(editing.id); b.dataset.arm=''; b.textContent='Delete'; $('#editSheet').classList.remove('open'); };
+
+// ---------- backup ----------
+$('#moreBtn').onclick=()=>$('#moreSheet').classList.add('open');
+$('#exportBtn').onclick=()=>{ const blob=new Blob([JSON.stringify({app:'home-inventory',v:1,items})],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='home-inventory-'+new Date().toISOString().slice(0,10)+'.json'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),5000); };
+$('#importBtn').onclick=()=>$('#importFile').click();
+$('#importFile').onchange=async e=>{ const f=e.target.files[0]; e.target.value=''; if(!f) return;
+  try{ const d=JSON.parse(await f.text()); const arr=Array.isArray(d)?d:d.items; if(!Array.isArray(arr)) throw new Error('Not a backup file');
+    let n=0; for(const it of arr){ if(it&&it.id&&it.name){ await tx('readwrite',s=>s.put(it)); n++; } } await loadAll(); $('#moreStatus').textContent='Imported '+n+' items.'; }
+  catch(err){ $('#moreStatus').className='status err'; $('#moreStatus').textContent='Import failed: '+err.message; } };
+
+window.addEventListener('error',e=>toast('Error: '+e.message));
+window.addEventListener('unhandledrejection',e=>toast('Error: '+(e.reason&&e.reason.message||e.reason)));
+loadAll();
+})();
+</script>
+</body>
+</html>
