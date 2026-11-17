@@ -77,6 +77,23 @@
   .cropper img{max-width:100%;max-height:60vh;display:block;border-radius:10px}
   .cropper .sel{position:absolute;border:2px dashed #fff;box-shadow:0 0 0 9999px rgba(0,0,0,.45);pointer-events:none;border-radius:4px}
   .hint{font-size:13px;color:var(--mute);margin-top:6px}
+  /* kinds: food, clothes, hardware, media */
+  .kf{display:none}
+  .foodmode .ff,.clothmode .cf,.hwmode .hwf,.mediamode .mf{display:block}
+  select.kindSel,.fi select.ks{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;font-size:16px;background:#fff;font-family:inherit}
+  .fi select.ks{width:auto;max-width:118px;flex:none;padding:6px;font-size:12px;border-radius:8px}
+  .bd{display:inline-block;font-size:11px;font-weight:700;border-radius:999px;padding:2px 8px;margin-top:6px;background:var(--acc2);color:var(--acc);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .bd.soon{background:#fdf3df;color:#b07a12}.bd.over{background:#fbeae6;color:var(--warn)}
+  .card{position:relative}
+  .ck{position:absolute;top:8px;left:8px;width:24px;height:24px;border-radius:50%;border:2px solid #fff;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;color:#fff;font-size:14px;font-weight:700;z-index:1}
+  body.selecting .ck{display:flex}.card.sel{outline:3px solid var(--acc);outline-offset:-3px}.card.sel .ck{background:var(--acc)}
+  body.selecting .fab{display:none}
+  .selbar{position:fixed;left:12px;right:12px;bottom:18px;z-index:9;display:none;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap}
+  body.selecting .selbar{display:flex}
+  .selbar #selCount{width:100%;text-align:center;font-size:13px;color:var(--mute);font-weight:600}
+  .selbar button{border:1px solid var(--line);background:#fff;border-radius:12px;padding:12px 14px;font-weight:600;font-size:14px;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.12)}
+  .selbar button.danger{background:var(--warn);color:#fff;border-color:var(--warn)}
+  .selbar button:disabled{opacity:.5}
 </style>
 </head>
 <body>
@@ -84,6 +101,7 @@
   <h1>Home Inventory <small id="count"></small><small style="opacity:.5">v8.1</small></h1>
   <div class="search"><input id="q" type="search" placeholder="Search: screwdriver, spanner, kitchen drawer…" autocomplete="off"></div>
   <div class="chips" id="chips"></div>
+  <div class="chips" id="kinds"></div>
 </header>
 <main>
   <div class="tabs"><button id="tabItems" class="on">Items</button><button id="tabLocs">Locations</button></div>
@@ -95,10 +113,13 @@
 
 <div class="fab">
   <button id="addBtn">📷 Add item</button>
+  <button id="selBtn" class="sec">Select</button>
   <button id="moreBtn" class="sec">⋯</button>
 </div>
 <input id="pick" type="file" accept="image/*" capture="environment" hidden>
 <input id="importFile" type="file" accept="application/json" hidden>
+
+<div class="selbar" id="selbar"><span id="selCount">0 selected</span><button id="selAll">All shown</button><button id="selMove">Move…</button><button id="selDel" class="danger">Delete</button><button id="selCancel">Cancel</button></div>
 
 <!-- Camera sheet -->
 <div class="sheet" id="camSheet"><div class="panel">
@@ -146,6 +167,30 @@
     <div><label>Room / area</label><input type="text" id="eRoom" list="rooms"></div>
   </div>
   <label>Exact spot (space)</label><input type="text" id="eSpace" list="spaces">
+  <label>Kind</label>
+  <select id="eKind" class="kindSel">
+    <option value="item">📦 Other</option><option value="food">🥫 Food</option><option value="cloth">👕 Clothes</option><option value="hw">🔧 Hardware</option><option value="media">📚 Media</option>
+  </select>
+  <div class="kf ff"><div class="row">
+    <div><label>Expires / best before</label><input type="date" id="eExp"></div>
+    <div><label>Quantity</label><input type="text" id="eQty" placeholder="1 pack, 500 g…"></div></div></div>
+  <div class="kf cf"><div class="row">
+    <div><label>Category</label><input type="text" id="eCat" placeholder="Top, Trousers, Shoes…"></div>
+    <div><label>Size</label><input type="text" id="eSize" placeholder="M, 32, UK 9…"></div></div>
+    <div class="row"><div><label>Colour</label><input type="text" id="eColor"></div>
+    <div><label>Season</label><input type="text" id="eSeason" placeholder="All year"></div></div>
+    <label>Brand</label><input type="text" id="eBrand"></div>
+  <div class="kf hwf"><div class="row">
+    <div><label>Type</label><input type="text" id="eHType" placeholder="Tools, Electrical…"></div>
+    <div><label>Quantity</label><input type="text" id="eHQty" inputmode="numeric" placeholder="1"></div></div>
+    <div class="row"><div><label>Size / spec</label><input type="text" id="eSpec" placeholder="13A, M6 x 40…"></div>
+    <div><label>Brand</label><input type="text" id="eHBrand"></div></div></div>
+  <div class="kf mf"><div class="row">
+    <div><label>Type</label><input type="text" id="eMType" placeholder="Book, Video game…"></div>
+    <div><label>Format / platform</label><input type="text" id="eFormat" placeholder="Paperback, PS5…"></div></div>
+    <div class="row"><div><label>Author / studio</label><input type="text" id="eCreator"></div>
+    <div><label>Year</label><input type="text" id="eYear" inputmode="numeric"></div></div>
+    <label>Lent to</label><input type="text" id="eLent" placeholder="Leave blank if it's at home"></div>
   <label>Tags (comma separated)</label><input type="text" id="eTags">
   <label>Notes</label><textarea id="eNotes"></textarea>
   <div class="actions"><button class="btn" id="saveEdit">Save changes</button><button class="btn danger" id="delItem">Delete</button></div>
@@ -159,7 +204,21 @@
     <button class="btn" id="exportBtn">Export backup (.json)</button>
     <button class="btn ghost" id="importBtn">Import backup</button>
   </div>
+  <button class="btn ghost" id="sortBtn" style="width:100%;margin-top:10px">✨ Auto-sort plain items into kinds</button>
   <div class="status" id="moreStatus"></div>
+</div></div>
+
+<!-- Move sheet (bulk) -->
+<div class="sheet" id="moveSheet"><div class="panel">
+  <h2>Move items <button class="x" data-close="moveSheet">✕</button></h2>
+  <div class="row">
+    <div><label>Place</label><input type="text" id="mPlace" list="places"></div>
+    <div><label>Room / area</label><input type="text" id="mRoom" list="rooms"></div>
+  </div>
+  <label>Exact spot (optional)</label><input type="text" id="mSpace" list="spaces">
+  <div class="hint">Leave a box blank to keep each item's current value.</div>
+  <div class="actions"><button class="btn" id="moveOk">Move</button><button class="btn ghost" data-close="moveSheet">Cancel</button></div>
+  <div class="status" id="moveStatus"></div>
 </div></div>
 
 <div class="lb" id="lb"><img id="lbImg" alt=""><div class="cap" id="lbCap"></div></div>
@@ -170,7 +229,8 @@
 const $ = s => document.querySelector(s);
 const uid = () => Math.random().toString(36).slice(2,10)+Date.now().toString(36);
 const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let items=[], filterRoom=null, locFilter=null, view='items', editing=null;
+let items=[], filterRoom=null, filterKind='', locFilter=null, view='items', editing=null;
+let selecting=false, selected=new Set();
 let pendingImg=null, pendingPhotoUrl=null, stream=null, model=null, modelLoading=null, yolo=null, yoloNames=null, yoloLoading=null;
 
 // ---------- IndexedDB ----------
@@ -184,6 +244,28 @@ async function putItem(it){ if(useLS){ const i=items.findIndex(x=>x.id===it.id);
 async function removeItem(id){ if(useLS){ items=items.filter(x=>x.id!==id); localStorage.setItem(LSK,JSON.stringify(items)); return loadAll(); } await tx('readwrite',s=>s.delete(id)); await loadAll(); }
 
 // ---------- helpers ----------
+// Kinds: item (other), food, cloth (clothes), hw (hardware), media. Kind is guessed offline from the name by keyword.
+const KINDS={item:{icon:'📦',label:'Other'},food:{icon:'🥫',label:'Food'},cloth:{icon:'👕',label:'Clothes'},hw:{icon:'🔧',label:'Hardware'},media:{icon:'📚',label:'Media'}};
+const KW={
+  media:/\b(books?|novels?|dvds?|blu-?rays?|video games?|games?|cds?|vinyl|records?|comics?|magazines?|films?|board games?|puzzles?)\b/,
+  cloth:/\b(shirts?|t-?shirts?|jumpers?|sweaters?|hoodies?|jackets?|coats?|trousers|jeans|shorts|skirts?|dress(es)?|shoes?|boots?|sneakers|trainers|socks?|underwear|hats?|caps?|scarfs?|gloves?|handbags?|backpacks?|belts?|blouses?|suits?)\b/,
+  food:/\b(milk|bread|cheese|yogh?urts?|butter|eggs?|apples?|bananas?|oranges?|tomato(es)?|carrots?|potato(es)?|onions?|rice|pasta|cereal|juice|soda|coffee|tea|sauce|ketchup|jam|honey|chocolate|biscuits?|cookies?|snacks?|soup|flour|sugar|vinegar|fruits?|vegetables?|chicken|beef|fish|beer|wine|cake|pizza|food|drinks?)\b/,
+  hw:/\b(screwdrivers?|hammers?|drills?|saws?|spanners?|wrench(es)?|pliers|tape measures?|levels?|cables?|wires?|plugs?|sockets?|switch(es)?|bulbs?|fuses?|screws?|nails?|bolts?|washers?|pipes?|taps?|valves?|tools?|toolbox|allen keys?|chisels?|sanders?)\b/
+};
+function guessKind(name){ const n=String(name||'').toLowerCase(); for(const k of ['media','cloth','food','hw']) if(KW[k].test(n)) return k; return 'item'; }
+const kindOf=it=>(it&&it.kind)||'item';
+const kindIcon=it=>(KINDS[kindOf(it)]||KINDS.item).icon;
+const dateStr=ts=>{ if(!ts) return ''; const d=new Date(ts); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
+const dateTs=s=>s?new Date(s+'T12:00:00').getTime():null;
+function detailText(it){ const k=kindOf(it);
+  if(k==='food'){ const f=it.food||{}; if(!f.expires) return f.qty||''; const d=Math.ceil((f.expires-Date.now())/86400000); return d<0?'Expired':d===0?'Expires today':d<=7?'Expires in '+d+'d':'Expires '+new Date(f.expires).toLocaleDateString('en-US',{month:'short',day:'numeric'}); }
+  if(k==='cloth'){ const c=it.cloth||{}; return [c.size,c.color].filter(Boolean).join(' · '); }
+  if(k==='hw'){ const h=it.hw||{}; return [h.spec,h.qty&&h.qty!=='1'?'×'+h.qty:''].filter(Boolean).join(' · '); }
+  if(k==='media'){ const m=it.media||{}; return m.lentTo?'🤝 Lent to '+m.lentTo:[m.type,m.format].filter(Boolean).join(' · '); }
+  return ''; }
+function badgeCls(it){ const k=kindOf(it); if(k==='food'&&it.food&&it.food.expires){ const d=Math.ceil((it.food.expires-Date.now())/86400000); return d<0?'over':d<=7?'soon':''; } if(k==='media'&&it.media&&it.media.lentTo) return 'soon'; return ''; }
+const MODE={food:'foodmode',cloth:'clothmode',hw:'hwmode',media:'mediamode'};
+function setKindMode(sheet,k){ Object.values(MODE).forEach(c=>sheet.classList.remove(c)); if(MODE[k]) sheet.classList.add(MODE[k]); }
 function whereText(it){ return [it.place,it.room,it.space].filter(Boolean).join(' › '); }
 function locKey(it){ return [it.place||'',it.room||'',it.space||''].join('|'); }
 function loadImg(src){ return new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=rej; i.src=src; }); }
@@ -201,7 +283,7 @@ function cropBox(img,box,max){ // box = [x,y,w,h] in pixels of img, or null for 
 function setView(v){ view=v; $('#tabItems').classList.toggle('on',v==='items'); $('#tabLocs').classList.toggle('on',v==='locs'); render(); }
 function render(){
   const isLocs=view==='locs';
-  $('#locs').style.display=isLocs?'flex':'none'; $('#list').style.display=isLocs?'none':'grid'; $('#chips').style.display=(isLocs||locFilter)?'none':'flex';
+  $('#kinds').style.display=isLocs?'none':'flex'; $('#locs').style.display=isLocs?'flex':'none'; $('#list').style.display=isLocs?'none':'grid'; $('#chips').style.display=(isLocs||locFilter)?'none':'flex';
   $('#back').style.display=locFilter?'flex':'none';
   if(locFilter){ const p=locFilter.split('|'); $('#back').textContent='‹ Back to locations — '+(p.filter(Boolean).join(' › ')||'No location'); }
   const fill=(id,key)=>$('#'+id).innerHTML=[...new Set(items.map(i=>i[key]).filter(Boolean))].map(v=>'<option value="'+esc(v)+'">').join('');
@@ -210,19 +292,23 @@ function render(){
   const q=$('#q').value.trim().toLowerCase(); const terms=q.split(/\s+/).filter(Boolean);
   const rooms=[...new Set(items.map(i=>i.room).filter(Boolean))].sort();
   $('#chips').innerHTML=['<span class="chip'+(filterRoom?'':' on')+'" data-r="">All</span>'].concat(rooms.map(r=>'<span class="chip'+(filterRoom===r?' on':'')+'" data-r="'+esc(r)+'">'+esc(r)+'</span>')).join('');
+  $('#kinds').innerHTML=['','food','cloth','hw','media','item'].map(k=>{ const n=items.filter(i=>!k||kindOf(i)===k).length; if(k&&!n) return ''; return '<span class="chip'+((filterKind||'')===k?' on':'')+'" data-k="'+k+'">'+(k?KINDS[k].icon+' '+KINDS[k].label:'All kinds')+' · '+n+'</span>'; }).join('');
   const shown=items.filter(it=>{
     if(locFilter&&locKey(it)!==locFilter) return false;
     if(filterRoom&&it.room!==filterRoom) return false;
+    if(filterKind&&kindOf(it)!==filterKind) return false;
     if(!terms.length) return true;
-    const hay=[it.name,it.place,it.room,it.space,it.notes,(it.tags||[]).join(' ')].join(' ').toLowerCase();
+    const c=it.cloth||{}, h=it.hw||{}, m=it.media||{}, f=it.food||{};
+    const hay=[it.name,it.place,it.room,it.space,it.notes,(it.tags||[]).join(' '),KINDS[kindOf(it)].label,c.cat,c.size,c.color,c.season,c.brand,h.type,h.spec,h.brand,m.type,m.format,m.creator,m.year,m.lentTo,f.qty].join(' ').toLowerCase();
     return terms.every(t=>hay.includes(t));
   });
   $('#count').textContent=items.length?(shown.length===items.length?items.length+' items':shown.length+' of '+items.length):'';
   $('#empty').style.display=shown.length?'none':'block';
   $('#empty').innerHTML=items.length?'Nothing matches "'+esc(q)+'".':'No items yet. Tap <b>Add item</b> to photograph something.';
-  $('#list').innerHTML=shown.map(it=>`<div class="card" data-id="${it.id}">
-    <div class="ph" ${it.photo?`style="background-image:url('${it.photo}')"`:''}>${it.photo?'':'📦'}</div>
-    <div class="b"><div class="n">${esc(it.name)}</div><div class="w" data-loc="${esc(locKey(it))}">📍 ${esc(whereText(it))||'No location'}</div></div></div>`).join('');
+  $('#list').innerHTML=shown.map(it=>{ const bc=badgeCls(it), det=detailText(it); return `<div class="card${selected.has(it.id)?' sel':''}" data-id="${it.id}">
+    <div class="ck">${selected.has(it.id)?'✓':''}</div>
+    <div class="ph" ${it.photo?`style="background-image:url('${it.photo}')"`:''}>${it.photo?'':kindIcon(it)}</div>
+    <div class="b"><div class="n">${esc(it.name)}</div><div class="w" data-loc="${esc(locKey(it))}">📍 ${esc(whereText(it))||'No location'}</div>${det?`<span class="bd ${bc}">${esc(det)}</span>`:''}</div></div>`; }).join('');
 }
 function renderLocs(){
   const groups={}; items.forEach(it=>{ const k=locKey(it); (groups[k]=groups[k]||{it,list:[]}).list.push(it); });
@@ -242,7 +328,8 @@ $('#chips').addEventListener('click',e=>{ const c=e.target.closest('.chip'); if(
 $('#tabItems').onclick=()=>{ locFilter=null; setView('items'); };
 $('#tabLocs').onclick=()=>{ locFilter=null; setView('locs'); };
 $('#back').onclick=()=>{ locFilter=null; setView('locs'); };
-$('#list').addEventListener('click',e=>{ const ph=e.target.closest('.ph'); if(ph){ showPhoto(items.find(i=>i.id===ph.parentElement.dataset.id)); return; }
+$('#kinds').addEventListener('click',e=>{ const c=e.target.closest('.chip'); if(!c) return; filterKind=c.dataset.k||''; render(); });
+$('#list').addEventListener('click',e=>{ if(selecting){ const cc=e.target.closest('.card'); if(cc) toggleSel(cc.dataset.id); return; } const ph=e.target.closest('.ph'); if(ph){ showPhoto(items.find(i=>i.id===ph.parentElement.dataset.id)); return; }
   const w=e.target.closest('.w'); if(w){ locFilter=w.dataset.loc; filterRoom=null; $('#q').value=''; setView('items'); return; }
   const c=e.target.closest('.card'); if(c) openEdit(c.dataset.id); });
 $('#locs').addEventListener('click',e=>{ const th=e.target.closest('.th'); if(th){ showPhoto(items.find(i=>i.id===th.parentElement.dataset.id)); return; }
@@ -263,9 +350,10 @@ $('#shutter').onclick=async()=>{ const v=$('#video'); const c=document.createEle
 $('#pick').onchange=async e=>{ const f=e.target.files[0]; e.target.value=''; if(!f) return; try{ await startAdd(await loadImg(await shrinkFile(f))); }catch(err){ console.error(err); toast('Could not open photo: '+(err&&err.message||err)); } };
 
 // ---------- add flow ----------
-function foundRow(name='',box=null,checked=true){
+function foundRow(name='',box=null,checked=true,kind=null){
+  kind=kind||guessKind(name);
   const d=document.createElement('div'); d.className='fi'; d._box=box;
-  d.innerHTML=`<input type="checkbox" ${checked?'checked':''}><img class="crop" alt=""><input type="text" value="${esc(name)}" placeholder="Item name">`;
+  d.innerHTML=`<input type="checkbox" ${checked?'checked':''}><img class="crop" alt=""><input type="text" value="${esc(name)}" placeholder="Item name"><select class="ks">${Object.keys(KINDS).map(k=>`<option value="${k}"${k===kind?' selected':''}>${KINDS[k].icon} ${KINDS[k].label}</option>`).join('')}</select>`;
   if(pendingImg) d.querySelector('.crop').src=cropBox(pendingImg,box,160);
   return d;
 }
@@ -362,7 +450,7 @@ $('#saveAdd').onclick=async()=>{
   try{ localStorage.setItem('hi-place',base.place); }catch(e){}
   try{
     const full=shrinkImg(pendingImg,900);
-    for(const r of rows){ await putItem({id:uid(),name:r.querySelector('[type=text]').value.trim(),tags:[],...base,photo:cropBox(pendingImg,r._box,700),fullPhoto:full}); }
+    for(const r of rows){ await putItem({id:uid(),name:r.querySelector('[type=text]').value.trim(),kind:r.querySelector('.ks').value,tags:[],...base,photo:cropBox(pendingImg,r._box,700),fullPhoto:full}); }
     $('#addSheet').classList.remove('open');
   }catch(e){ $('#scanStatus').className='status err'; $('#scanStatus').textContent='Save failed: '+(e.message||e); }
   btn.disabled=false; btn.textContent='Save';
@@ -374,15 +462,54 @@ function openEdit(id){
   $('#ePrev').src=editing.photo||''; $('#ePrev').style.display=editing.photo?'block':'none'; $('#ePrev').onclick=()=>showPhoto(editing);
   $('#eName').value=editing.name||''; $('#ePlace').value=editing.place||''; $('#eRoom').value=editing.room||'';
   $('#eSpace').value=editing.space||''; $('#eTags').value=(editing.tags||[]).join(', '); $('#eNotes').value=editing.notes||'';
+  const f=editing.food||{}, c=editing.cloth||{}, h=editing.hw||{}, m=editing.media||{};
+  $('#eKind').value=kindOf(editing); setKindMode($('#editSheet'),kindOf(editing));
+  $('#eExp').value=dateStr(f.expires); $('#eQty').value=f.qty||'';
+  $('#eCat').value=c.cat||''; $('#eSize').value=c.size||''; $('#eColor').value=c.color||''; $('#eSeason').value=c.season||''; $('#eBrand').value=c.brand||'';
+  $('#eHType').value=h.type||''; $('#eHQty').value=h.qty||''; $('#eSpec').value=h.spec||''; $('#eHBrand').value=h.brand||'';
+  $('#eMType').value=m.type||''; $('#eFormat').value=m.format||''; $('#eCreator').value=m.creator||''; $('#eYear').value=m.year||''; $('#eLent').value=m.lentTo||'';
   $('#editSheet').classList.add('open');
 }
 $('#saveEdit').onclick=async()=>{ if(!editing) return;
   await putItem({...editing,name:$('#eName').value.trim()||editing.name,place:$('#ePlace').value.trim(),room:$('#eRoom').value.trim(),space:$('#eSpace').value.trim(),
-    tags:$('#eTags').value.split(',').map(s=>s.trim()).filter(Boolean),notes:$('#eNotes').value.trim(),updatedAt:Date.now()});
+    tags:$('#eTags').value.split(',').map(s=>s.trim()).filter(Boolean),notes:$('#eNotes').value.trim(),updatedAt:Date.now(),
+    kind:$('#eKind').value,
+    food:{expires:dateTs($('#eExp').value),qty:$('#eQty').value.trim()},
+    cloth:{cat:$('#eCat').value.trim(),size:$('#eSize').value.trim(),color:$('#eColor').value.trim(),season:$('#eSeason').value.trim(),brand:$('#eBrand').value.trim()},
+    hw:{type:$('#eHType').value.trim(),qty:$('#eHQty').value.trim(),spec:$('#eSpec').value.trim(),brand:$('#eHBrand').value.trim()},
+    media:{type:$('#eMType').value.trim(),format:$('#eFormat').value.trim(),creator:$('#eCreator').value.trim(),year:$('#eYear').value.trim(),lentTo:$('#eLent').value.trim()}});
   $('#editSheet').classList.remove('open'); };
 $('#delItem').onclick=async()=>{ if(!editing) return; const b=$('#delItem');
   if(b.dataset.arm!=='1'){ b.dataset.arm='1'; b.textContent='Tap again to delete'; setTimeout(()=>{b.dataset.arm='';b.textContent='Delete';},2500); return; }
   await removeItem(editing.id); b.dataset.arm=''; b.textContent='Delete'; $('#editSheet').classList.remove('open'); };
+
+$('#eKind').addEventListener('change',()=>setKindMode($('#editSheet'),$('#eKind').value));
+
+// ---------- selection & organizing ----------
+async function putMany(arr){
+  if(useLS){ arr.forEach(it=>{ const i=items.findIndex(x=>x.id===it.id); if(i>=0) items[i]=it; else items.push(it); }); localStorage.setItem(LSK,JSON.stringify(items)); }
+  else { const d=await openDB(); await new Promise((res,rej)=>{ const t=d.transaction(STORE,'readwrite'); const s=t.objectStore(STORE); arr.forEach(it=>s.put(it)); t.oncomplete=()=>res(); t.onerror=()=>rej(t.error); }); }
+  await loadAll();
+}
+function updSel(){ $('#selCount').textContent=selected.size+' selected'; $('#selMove').disabled=!selected.size; $('#selDel').disabled=!selected.size; }
+function setSelecting(on){ selecting=on; if(!on) selected.clear(); document.body.classList.toggle('selecting',on); $('#selBtn').textContent=on?'Done':'Select'; updSel(); render(); }
+function toggleSel(id){ if(selected.has(id)) selected.delete(id); else selected.add(id); updSel(); render(); }
+$('#selBtn').onclick=()=>setSelecting(!selecting);
+$('#selCancel').onclick=()=>setSelecting(false);
+$('#selAll').onclick=()=>{ const ids=[...document.querySelectorAll('#list .card')].map(c=>c.dataset.id); const all=ids.length&&ids.every(id=>selected.has(id)); ids.forEach(id=>all?selected.delete(id):selected.add(id)); updSel(); render(); };
+$('#selMove').onclick=()=>{ $('#mPlace').value=''; $('#mRoom').value=''; $('#mSpace').value=''; $('#moveStatus').textContent=''; $('#moveSheet').classList.add('open'); };
+$('#moveOk').onclick=async()=>{ const p=$('#mPlace').value.trim(), r=$('#mRoom').value.trim(), s=$('#mSpace').value.trim();
+  if(!p&&!r&&!s){ $('#moveStatus').className='status err'; $('#moveStatus').textContent='Enter a place, room or spot.'; return; }
+  const list=items.filter(i=>selected.has(i.id)).map(i=>({...i,...(p?{place:p}:{}),...(r?{room:r}:{}),...(s?{space:s}:{}),updatedAt:Date.now()}));
+  try{ await putMany(list); $('#moveSheet').classList.remove('open'); setSelecting(false); }catch(e){ $('#moveStatus').className='status err'; $('#moveStatus').textContent='Move failed: '+(e.message||e); } };
+$('#selDel').onclick=async()=>{ const b=$('#selDel');
+  if(b.dataset.arm!=='1'){ b.dataset.arm='1'; b.textContent='Tap again'; setTimeout(()=>{ b.dataset.arm=''; b.textContent='Delete'; },3000); return; }
+  b.dataset.arm=''; b.textContent='Delete'; for(const id of [...selected]) await removeItem(id); setSelecting(false); };
+async function autoSort(){ const st=$('#moreStatus'); st.className='status';
+  const list=items.filter(i=>kindOf(i)==='item').map(i=>({i,k:guessKind(i.name)})).filter(x=>x.k!=='item').map(x=>({...x.i,kind:x.k,updatedAt:Date.now()}));
+  if(!list.length){ st.textContent='Nothing to sort — every item already has a kind.'; return; }
+  try{ await putMany(list); st.textContent='Sorted '+list.length+' item'+(list.length>1?'s':'')+' into kinds. Tap any item to change it.'; }catch(e){ st.className='status err'; st.textContent='Sort failed: '+(e.message||e); } }
+$('#sortBtn').onclick=autoSort;
 
 // ---------- backup ----------
 $('#moreBtn').onclick=()=>$('#moreSheet').classList.add('open');
